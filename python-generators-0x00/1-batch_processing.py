@@ -2,7 +2,7 @@
 import seed
 
 def stream_users_in_batches(batch_size):
-    """Generator yielding batches of users."""
+    """Generator yielding batches of users using yield."""
     connection = seed.connect_to_prodev()
     cursor = connection.cursor(dictionary=True)
     cursor.execute("SELECT * FROM user_data")
@@ -11,7 +11,7 @@ def stream_users_in_batches(batch_size):
         rows = cursor.fetchmany(batch_size)
         if not rows:
             break
-        yield rows
+        yield rows   # <-- yield instead of return
 
     cursor.close()
     connection.close()
