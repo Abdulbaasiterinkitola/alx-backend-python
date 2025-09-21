@@ -175,3 +175,4 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
         Stop the patcher implemented in setUpClass
         """
         cls.get_patcher.stop()
+        
