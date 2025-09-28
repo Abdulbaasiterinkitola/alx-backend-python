@@ -1,0 +1,23 @@
+{
+  "info": {
+    "name": "Messaging App API",
+    "_postman_id": "d1f9b74f-2e8a-4b76-90d1-123456789abc",
+    "description": "Postman collection for testing Messaging App API (Conversations, Messages, Auth)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "JWT Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"email\": \"user@example.com\",\n    \"password\": \"yourpassword\"\n}"
+        },
+        "url": { "raw": "http://127.0.0.1:8000/api/token/", "protocol": "http", "host": ["127.0.0.1"], "port": "8000", "path": ["api", "token", ""] }
+      }
+    }
+  ]
+}
+
