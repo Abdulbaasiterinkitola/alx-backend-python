@@ -66,9 +66,12 @@ class MessageViewSet(viewsets.ModelViewSet):
         except Conversation.DoesNotExist:
             return Response({"error": "Conversation not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # check participant access
+        # ✅ enforce custom permission
         if request.user not in conversation.participants.all():
-            raise PermissionDenied(detail="You are not a participant in this conversation.")
+            return Response(
+                {"error": "You are not a participant in this conversation."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         message = Message.objects.create(
             sender=sender,
@@ -78,4 +81,3 @@ class MessageViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(message)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-    
