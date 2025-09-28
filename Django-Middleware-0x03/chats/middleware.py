@@ -1,5 +1,8 @@
 from datetime import datetime
 from django.http import HttpResponseForbidden
+import logging
+
+logger = logging.getLogger(__name__)
 
 class RestrictAccessByTimeMiddleware:
     """
@@ -94,3 +97,22 @@ class RolepermissionMiddleware:
 
         return self.get_response(request)
 
+
+class RequestLoggingMiddleware:
+    """
+    Middleware to log HTTP method and path of each request.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # Log request details
+        logger.info(f"Request: {request.method} {request.path}")
+
+        response = self.get_response(request)
+
+        # Optionally log response status
+        logger.info(f"Response status: {response.status_code}")
+
+        return response
