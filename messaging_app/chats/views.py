@@ -6,6 +6,8 @@ from .serializers import ConversationSerializer, MessageSerializer
 from .pagination import MessagePagination
 from .filters import MessageFilter
 from .permissions import IsParticipantOfConversation
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import IsAuthenticated
 
 
 class ConversationViewSet(viewsets.ModelViewSet):
@@ -31,9 +33,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(conversation)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-
 class MessageViewSet(viewsets.ModelViewSet):
-    queryset = Message.objects.all()
     serializer_class = MessageSerializer
     pagination_class = MessagePagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -41,7 +41,11 @@ class MessageViewSet(viewsets.ModelViewSet):
     search_fields = ["conversation__conversation_id", "sender__email"]
     ordering_fields = ["sent_at"]
     ordering = ["-sent_at"]
-    permission_classes = [IsParticipantOfConversation]
+    permission_classes = [IsAuthenticated, IsParticipantOfConversation]
+
+    def get_queryset(self):
+        user = self.request.user
+        return Message.objects.filter(conversation__participants=user)
 
     def create(self, request, *args, **kwargs):
         sender_id = request.data.get("sender")
@@ -62,6 +66,10 @@ class MessageViewSet(viewsets.ModelViewSet):
         except Conversation.DoesNotExist:
             return Response({"error": "Conversation not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        # check participant access
+        if request.user not in conversation.participants.all():
+            raise PermissionDenied(detail="You are not a participant in this conversation.")
+
         message = Message.objects.create(
             sender=sender,
             conversation=conversation,
@@ -70,4 +78,4 @@ class MessageViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(message)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-
+    
