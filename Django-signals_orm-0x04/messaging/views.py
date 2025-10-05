@@ -1,27 +1,30 @@
-from django.shortcuts import render
-
-# Create your views here.
+from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import redirect
-from django.contrib import messages
-from django.contrib.auth import logout
+from django.views.decorators.cache import cache_page
+from django.http import JsonResponse
+from .models import Message, Notification
 from django.contrib.auth.models import User
 
+@login_required
+@cache_page(60)
+def conversation_view(request, user_id):
+    other_user = get_object_or_404(User, id=user_id)
+    messages = Message.objects.filter(
+        sender=request.user, receiver=other_user
+    ) | Message.objects.filter(
+        sender=other_user, receiver=request.user
+    )
+    messages = messages.select_related('sender', 'receiver').prefetch_related('replies')
+    return render(request, 'conversation.html', {'messages': messages, 'other_user': other_user})
 
 @login_required
-def delete_user(request):
-    """
-    Allow a logged-in user to delete their account.
-    All related data (messages, notifications, history)
-    will be cleaned automatically by post_delete signal.
-    """
-    user = request.user
+def delete_user_view(request):
+    if request.method == 'POST':
+        request.user.delete()
+        return JsonResponse({'status': 'success'})
+    return render(request, 'delete_account.html')
 
-    if request.method == "POST":
-        username = user.username
-        user.delete()
-        logout(request)
-        messages.success(request, f"Account '{username}' and all related data deleted successfully.")
-        return redirect("login")  # Redirect to login page or homepage
-
-    return redirect("profile")  # Default redirect if GET request
+@login_required
+def unread_messages_view(request):
+    unread_messages = Message.unread.unread_for_user(request.user).only('id', 'content', 'sender__username', 'timestamp')
+    return render(request, 'inbox.html', {'unread_messages': unread_messages})
