@@ -8,6 +8,12 @@ from .filters import MessageFilter
 from .permissions import IsParticipantOfConversation
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
+from .serializers import UserSerializer  # make sure you have this serializer
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
 
 
 class ConversationViewSet(viewsets.ModelViewSet):
