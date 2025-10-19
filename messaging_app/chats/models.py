@@ -1,6 +1,9 @@
 import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.utils.translation import gettext_lazy as _
+from .validators import validate_date_of_birth, validate_phone_number
+
 
 # ✅ Custom User model (extending Django's built-in User)
 class User(AbstractUser):
@@ -46,3 +49,28 @@ class Message(models.Model):
 
     def __str__(self):
         return f"Message from {self.sender.username} at {self.sent_at}"
+
+class Role(models.Model):
+    """Role model to define user roles in the messaging app.
+
+    Args:
+        models (Model): Django Model class
+    """
+    role_id = models.CharField(max_length=50, primary_key=True, default=uuid4, editable=False, serialize=False, auto_created=True)
+    name = models.CharField(max_length=50, unique=True, null=False, blank=False, serialize=True, error_messages={
+        "unique": _("A role with that name already exists."),
+        "blank": _("Role name is required.")})
+    description = models.TextField(null=True, blank=True, serialize=True)
+
+    # audit fields
+    created_at = models.DateTimeField(auto_now_add=True, serialize=False, editable=False)
+    updated_at = models.DateTimeField(auto_now=True, serialize=False, editable=True)
+    deleted_at = models.DateTimeField(null=True, blank=True, serialize=False, editable=True)
+
+    created_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='creator_role', serialize=False)
+    updated_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='updater_role', serialize=False)
+    deleted_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='deleter_role', serialize=False)
+
+    def __str__(self):
+        return self.name.capitalize()
+    

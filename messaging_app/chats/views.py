@@ -1,89 +1,127 @@
 from rest_framework import viewsets, status, filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.response import Response
-from .models import Conversation, Message, User
-from .serializers import ConversationSerializer, MessageSerializer
+from .models import Conversation, Message, User, Role
 from .pagination import MessagePagination
 from .filters import MessageFilter
 from .permissions import IsParticipantOfConversation
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import IsAuthenticated
-from .serializers import UserSerializer  # make sure you have this serializer
-
-class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-    permission_classes = [IsAuthenticated]
-
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
+from .serializers import ConversationSerializer, MessageSerializer, RoleSerializer, UserSerializer
+from rest_framework.decorators import action
+from rest_framework.decorators import permission_classes
 
 class ConversationViewSet(viewsets.ModelViewSet):
-    queryset = Conversation.objects.all()
+    """
+    ViewSet for listing, retrieving, and creating conversations.
+    """
+    permission_classes=[IsAuthenticated]
+
+    queryset = Conversation.objects.all().prefetch_related('participants')
     serializer_class = ConversationSerializer
-    filter_backends = [filters.OrderingFilter]
-    ordering_fields = ["created_at"]
-    ordering = ["-created_at"]
-    permission_classes = [IsParticipantOfConversation]
 
     def create(self, request, *args, **kwargs):
-        participant_ids = request.data.get("participants", [])
-        if not participant_ids or len(participant_ids) < 2:
-            return Response(
-                {"error": "A conversation requires at least 2 participants."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        """
+        Create a new conversation between users.
+        Expected payload:
+        {
+            "participant_ids": [<user_id_1>, <user_id_2>, ...]
+        }
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        conversation = serializer.save()
+        return Response(self.get_serializer(conversation).data, status=status.HTTP_201_CREATED)
 
-        conversation = Conversation.objects.create()
-        participants = User.objects.filter(user_id__in=participant_ids)
-        conversation.participants.set(participants)
-        conversation.save()
-        serializer = self.get_serializer(conversation)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    @action(detail=True, methods=['get'])
+    def messages(self, request, pk=None):
+        """
+        Retrieve all messages in a specific conversation.
+        """
+        conversation = self.get_object()
+        messages = Message.objects.filter(
+            sender__in=conversation.participants.all(),
+            receiver__in=conversation.participants.all()
+        ).order_by('sent_at')
+
+        serializer = MessageSerializer(messages, many=True)
+        return Response(serializer.data)
+
 
 class MessageViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for listing and creating messages.
+    """
+    permission_classes=[IsAuthenticated]
+    
+    queryset = Message.objects.all().select_related('sender', 'receiver')
     serializer_class = MessageSerializer
-    pagination_class = MessagePagination
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_class = MessageFilter
-    search_fields = ["conversation__conversation_id", "sender__email"]
-    ordering_fields = ["sent_at"]
-    ordering = ["-sent_at"]
-    permission_classes = [IsAuthenticated, IsParticipantOfConversation]
-
-    def get_queryset(self):
-        user = self.request.user
-        return Message.objects.filter(conversation__participants=user)
 
     def create(self, request, *args, **kwargs):
-        sender_id = request.data.get("sender")
-        conversation_id = request.data.get("conversation")
-        message_body = request.data.get("message_body", "").strip()
+        """
+        Send a message between users.
+        Expected payload:
+        {
+            "sender_id": "<user_id>",
+            "receiver_id": "<user_id>",
+            "message_body": "Hello!"
+        }
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        message = serializer.save()
+        return Response(self.get_serializer(message).data, status=status.HTTP_201_CREATED)
 
-        if not sender_id or not conversation_id or not message_body:
-            return Response(
-                {"error": "sender, conversation, and message_body are required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+class UserViewSet(viewsets.ModelViewSet):
+    """Viewset for user management
+    """
 
-        try:
-            sender = User.objects.get(user_id=sender_id)
-            conversation = Conversation.objects.get(conversation_id=conversation_id)
-        except User.DoesNotExist:
-            return Response({"error": "Sender not found"}, status=status.HTTP_404_NOT_FOUND)
-        except Conversation.DoesNotExist:
-            return Response({"error": "Conversation not found"}, status=status.HTTP_404_NOT_FOUND)
+    queryset = User.objects.all().prefetch_related('conversations')
+    serializer_class = UserSerializer
 
-        # ✅ enforce custom permission
-        if request.user not in conversation.participants.all():
-            return Response(
-                {"error": "You are not a participant in this conversation."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+    @permission_classes([AllowAny])
+    def create(self, request, *args, **kwargs):
+        """ Any user can create a new user"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        message = serializer.save()
+        return Response(self.get_serializer(message).data, status=status.HTTP_201_CREATED)
 
-        message = Message.objects.create(
-            sender=sender,
-            conversation=conversation,
-            message_body=message_body,
-        )
+    @permission_classes([IsAuthenticated, IsAdminUser])
+    def list(self, request, *args, **kwargs):
+        """ Admin can list all users"""
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
-        serializer = self.get_serializer(message)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    @action(detail=True, methods=['get'])
+    @permission_classes([IsAuthenticated, IsAdminUser])
+    def user(self, request, *args, **kwargs):
+        """ Admin/ user can get a user"""
+        user_id = kwargs['pk'] or request.user.user_id
+        user = self.get_queryset().get(user_id=user_id)
+        serializer = self.get_serializer(user)
+        return Response(serializer.data)
+
+
+class RoleViewSet(viewsets.ModelViewSet):
+    """Viewset for role management
+    """ 
+    permission_classes=[IsAuthenticated, IsAdminUser]
+    queryset = Role.objects.all()
+    serializer_class = RoleSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        role = serializer.save()
+        return Response(self.get_serializer(role).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get'])
+    def get(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        if kwargs['pk']:
+            queryset = queryset.filter(role_id=kwargs['pk'])
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
