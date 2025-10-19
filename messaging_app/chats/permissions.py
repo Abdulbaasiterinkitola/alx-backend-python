@@ -1,36 +1,28 @@
 from rest_framework import permissions
-
+from rest_framework.exceptions import PermissionDenied
 
 class IsParticipantOfConversation(permissions.BasePermission):
     """
-    Custom permission:
-    - Only authenticated users can access the API.
-    - Only participants of a conversation can send, view, update, and delete messages.
+    Custom permission to allow only participants of a conversation to 
+    send, view, update, or delete messages.
     """
 
     def has_permission(self, request, view):
-        # Require authentication
+        """
+        Check if the user is authenticated.
+        """
+        # Only authenticated users can access the API
         return request.user and request.user.is_authenticated
 
     def has_object_permission(self, request, view, obj):
         """
-        Explicitly check for GET, POST, PUT, PATCH, DELETE methods.
-        Only participants are allowed.
+        Object-level permission to check if the user is a participant of the conversation
+        for PUT, PATCH, or DELETE actions.
         """
-        if hasattr(obj, "participants"):  # Conversation
-            is_participant = request.user in obj.participants.all()
-        elif hasattr(obj, "conversation"):  # Message
-            is_participant = request.user in obj.conversation.participants.all()
-        else:
-            return False
-
-        # Allow read-only access (GET, HEAD, OPTIONS) if participant
-        if request.method in permissions.SAFE_METHODS:
-            return is_participant
-
-        # Explicit checks for modification methods
-        if request.method in ["POST", "PUT", "PATCH", "DELETE"]:
-            return is_participant
-
-        return False
-
+        # Check that the user is a participant in the conversation for PUT, PATCH, and DELETE
+        if view.action in ['PUT', 'PATCH', 'DELETE']:
+            conversation = obj.conversation 
+            if request.user not in conversation.participants.all():
+                raise PermissionDenied("You are not a participant in this conversation.")
+        
+        return True

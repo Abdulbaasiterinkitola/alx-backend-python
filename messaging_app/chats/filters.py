@@ -1,22 +1,14 @@
+# messaging_app/chats/filters.py
+
 import django_filters
 from .models import Message
-
+from django.utils import timezone
 
 class MessageFilter(django_filters.FilterSet):
-    start_date = django_filters.DateTimeFilter(
-        field_name="sent_at", lookup_expr="gte"
-    )
-    end_date = django_filters.DateTimeFilter(
-        field_name="sent_at", lookup_expr="lte"
-    )
-    sender = django_filters.CharFilter(
-        field_name="sender__email", lookup_expr="icontains"
-    )
-    conversation = django_filters.UUIDFilter(
-        field_name="conversation__conversation_id"
-    )
+    user = django_filters.CharFilter(field_name='user__username', lookup_expr='icontains', label="User")
+    start_date = django_filters.DateFilter(field_name='timestamp', lookup_expr='gte', label="Start Date")
+    end_date = django_filters.DateFilter(field_name='timestamp', lookup_expr='lte', label="End Date")
 
     class Meta:
         model = Message
-        fields = ["sender", "conversation", "start_date", "end_date"]
-
+        fields = ['user', 'start_date', 'end_date'] 

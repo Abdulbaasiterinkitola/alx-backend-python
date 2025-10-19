@@ -1,76 +1,90 @@
-import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractUser
-from django.utils.translation import gettext_lazy as _
-from .validators import validate_date_of_birth, validate_phone_number
+from .managers import UserManager
+import uuid
 
-
-# ✅ Custom User model (extending Django's built-in User)
+# User model
 class User(AbstractUser):
-    # Primary key
-    user_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
-    # Explicitly redeclare fields so automated checks see them
-    email = models.EmailField(unique=True)
-    password = models.CharField(max_length=128)
-    first_name = models.CharField(max_length=150)
-    last_name = models.CharField(max_length=150)
-
-    # Extra fields
+    ROLE_CHOICES = [
+        ('guest', 'Guest'),
+        ('host', 'Host'),
+        ('admin', 'Admin'),
+    ]
+    user_id = models.UUIDField(primary_key=True, default=uuid.uuid4, unique=True, editable=False, db_index=True)
+    username = None
+    email = models.EmailField(unique=True, null=False, blank=False)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
-    role = models.CharField(
-        max_length=10,
-        choices=[('guest', 'Guest'), ('host', 'Host'), ('admin', 'Admin')],
-        default='guest'
-    )
+    password = models.CharField(max_length=128, null=False, blank=False) # This field is not usually hardcoded in django
+    role = models.CharField(max_length=50, choices=ROLE_CHOICES, null=False, default='guest')
     created_at = models.DateTimeField(auto_now_add=True)
-
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    objects = UserManager()
+    
+    # Use email instead of username for authentication
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['first_name', 'last_name']
+    
+    class Meta:
+        """Class for defining user table constraints and indexes"""
+        db_table = 'user'
+        constraints = [
+            models.UniqueConstraint(fields=['email'], name='unique_user_email')
+        ]
+        indexes = [
+            models.Index(fields=['email']),
+            models.Index(fields=['user_id'])
+        ]
+    
     def __str__(self):
-        return self.username
+        return f'Name: {self.first_name} {self.last_name} ({self.email})'
+    
+    def get_full_name(self):
+        return f"{self.first_name} {self.last_name}"
+    
 
-
-# ✅ Conversation model
+# Conversation model
 class Conversation(models.Model):
-    conversation_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    participants = models.ManyToManyField(User, related_name="conversations")
+    conversation_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    participants = models.ManyToManyField(User, related_name='conversations')
     created_at = models.DateTimeField(auto_now_add=True)
-
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        """Class for defining conversation table indexes"""
+        db_table = 'conversation'
+        indexes = [
+            models.Index(fields=['created_at']),
+            models.Index(fields=['updated_at']),
+            models.Index(fields=['conversation_id'])
+        ]
+    
     def __str__(self):
-        return f"Conversation {self.conversation_id}"
+        return f"Conversation {self.conversation_id} with {', '.join([str(user) for user in self.participants.all()])}"
 
-
-# ✅ Message model
+# Message model
 class Message(models.Model):
-    message_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="messages")
-    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
+    message_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages', null=False, db_index=True)
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages', null=False, db_index=True)
     message_body = models.TextField()
     sent_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Message from {self.sender.username} at {self.sent_at}"
-
-class Role(models.Model):
-    """Role model to define user roles in the messaging app.
-
-    Args:
-        models (Model): Django Model class
-    """
-    role_id = models.CharField(max_length=50, primary_key=True, default=uuid4, editable=False, serialize=False, auto_created=True)
-    name = models.CharField(max_length=50, unique=True, null=False, blank=False, serialize=True, error_messages={
-        "unique": _("A role with that name already exists."),
-        "blank": _("Role name is required.")})
-    description = models.TextField(null=True, blank=True, serialize=True)
-
-    # audit fields
-    created_at = models.DateTimeField(auto_now_add=True, serialize=False, editable=False)
-    updated_at = models.DateTimeField(auto_now=True, serialize=False, editable=True)
-    deleted_at = models.DateTimeField(null=True, blank=True, serialize=False, editable=True)
-
-    created_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='creator_role', serialize=False)
-    updated_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='updater_role', serialize=False)
-    deleted_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='deleter_role', serialize=False)
-
-    def __str__(self):
-        return self.name.capitalize()
     
+    class Meta:
+        """Class for defining message table indexes"""
+        db_table = 'message'
+        ordering = ['sent_at']
+        indexes = [
+            models.Index(fields=["sender", "sent_at"]),
+            models.Index(fields=["conversation", "sent_at"]),
+            models.Index(fields=["sent_at"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(message_body__isnull=False) & ~models.Q(message_body=''),
+                name="message_body_not_empty"
+            )
+        ]
+    
+    def __str__(self):
+        return f"Message {self.message_id} from {self.sender} in conversation {self.conversation_id}"    
