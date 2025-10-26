@@ -24,12 +24,10 @@ pipeline {
     steps {
         sh '''
         . venv/bin/activate
-        pytest Django-Middleware-0x03/chats/tests.py --junitxml=test-results.xml
+        pytest Django-Middleware-0x03 --ds=settings --junitxml=test-results.xml
         '''
     }
 }
-
-
 
         stage('Publish test results') {
             steps {
