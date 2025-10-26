@@ -4,34 +4,40 @@ pipeline {
     stages {
         stage('Checkout code') {
             steps {
-                git branch: 'main',
+                git branch: 'master',
                     url: 'https://github.com/Abdulbaasiterinkitola/alx-backend-python.git'
             }
         }
 
         stage('Set up Python') {
             steps {
-                sh '''
-                python3 -m venv venv
-                . venv/bin/activate
-                pip install --upgrade pip
-                pip install -r alx-backend-python/messaging_app/requirements.txt
-                '''
+                dir('alx-backend-python/messaging_app') {
+                    sh '''
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                    '''
+                }
             }
         }
 
         stage('Run tests') {
             steps {
-                sh '''
-                . venv/bin/activate
-                pytest alx-backend-python/messaging_app --junitxml=test-results.xml
-                '''
+                dir('alx-backend-python/messaging_app') {
+                    sh '''
+                    . venv/bin/activate
+                    pytest --junitxml=test-results.xml
+                    '''
+                }
             }
         }
 
         stage('Publish test results') {
             steps {
-                junit 'test-results.xml'
+                dir('alx-backend-python/messaging_app') {
+                    junit 'test-results.xml'
+                }
             }
         }
     }
