@@ -14,7 +14,8 @@ pipeline {
                 sh '''
                 python3 -m venv venv
                 . venv/bin/activate
-                pip install -r requirements.txt
+                pip install --upgrade pip
+                pip install -r alx-backend-python/messaging_app/requirements.txt
                 '''
             }
         }
@@ -23,7 +24,7 @@ pipeline {
             steps {
                 sh '''
                 . venv/bin/activate
-                pytest messaging_app --junitxml=test-results.xml
+                pytest alx-backend-python/messaging_app --junitxml=test-results.xml
                 '''
             }
         }
