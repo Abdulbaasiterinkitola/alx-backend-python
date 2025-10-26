@@ -11,33 +11,27 @@ pipeline {
 
         stage('Set up Python') {
             steps {
-                dir('alx-backend-python/messaging_app') {
-                    sh '''
-                    python3 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
-                    '''
-                }
+                sh '''
+                python3 -m venv venv
+                . venv/bin/activate
+                pip install --upgrade pip
+                pip install -r Django-Middleware-0x03/requirements.txt
+                '''
             }
         }
 
         stage('Run tests') {
             steps {
-                dir('alx-backend-python/messaging_app') {
-                    sh '''
-                    . venv/bin/activate
-                    pytest --junitxml=test-results.xml
-                    '''
-                }
+                sh '''
+                . venv/bin/activate
+                pytest Django-Middleware-0x03/chats --junitxml=test-results.xml
+                '''
             }
         }
 
         stage('Publish test results') {
             steps {
-                dir('alx-backend-python/messaging_app') {
-                    junit 'test-results.xml'
-                }
+                junit 'test-results.xml'
             }
         }
     }
